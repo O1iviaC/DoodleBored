@@ -8,6 +8,8 @@ export default function DrawingScreen() {
   const [currentColor, setCurrentColor] = useState('#000000');
   const [currentSize, setCurrentSize] = useState(3);
   const [isEraser, setIsEraser] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const canvasRef = useRef(null);
 
   // Available colors
   const colors = [
@@ -77,6 +79,30 @@ export default function DrawingScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Menu Button */}
+      <View style={styles.menuContainer}>
+        <TouchableOpacity 
+          style={styles.menuButton}
+          onPress={() => setMenuOpen(!menuOpen)}
+        >
+          <Text style={styles.menuIcon}>☰</Text>
+        </TouchableOpacity>
+        
+        {menuOpen && (
+          <View style={styles.dropdown}>
+            <TouchableOpacity 
+              style={styles.dropdownItem}
+              onPress={() => {
+                setMenuOpen(false);
+                navigation.navigate('Library');
+              }}
+            >
+              <Text style={styles.dropdownText}>Library</Text>
+            </TouchableOpacity>
+            {/* Add more menu items here later */}
+          </View>
+        )}
+      </View>
       {/* Drawing Canvas */}
       <View style={styles.canvasContainer} {...panResponder.panHandlers}>
         <Svg height="100%" width="100%">
@@ -179,6 +205,49 @@ export default function DrawingScreen() {
 }
 
 const styles = StyleSheet.create({
+  menuContainer: {
+    position: 'absolute',
+    top: 50,
+    left: 10,
+    zIndex: 1000,
+  },
+  menuButton: {
+    width: 50,
+    height: 50,
+    backgroundColor: '#fff',
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  menuIcon: {
+    fontSize: 24,
+    color: '#333',
+  },
+  dropdown: {
+    marginTop: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 5,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    minWidth: 150,
+  },
+  dropdownItem: {
+    padding: 15,
+    borderRadius: 5,
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: '#333',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f0f0f0',

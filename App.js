@@ -5,6 +5,7 @@ import { supabase } from './supabaseConfig';
 import LoginScreen from './LoginScreen';
 import SignupScreen from './SignUpScreen';
 import DrawingScreen from './DrawingScreen';
+import LibraryScreen from './LibraryScreen';
 
 const Stack = createStackNavigator();
 
@@ -35,10 +36,11 @@ export default function App() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
-          // User is logged in - show app screens
-          <Stack.Screen name="Drawing" component={DrawingScreen} />
+          <>
+            <Stack.Screen name="Drawing" component={DrawingScreen} />
+            <Stack.Screen name="Library" component={LibraryScreen} />
+          </>
         ) : (
-          // User is not logged in - show auth screens
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
