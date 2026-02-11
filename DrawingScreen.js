@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, PanResponder } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, PanResponder, Alert } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
+import ViewShot from 'react-native-view-shot';
+import { supabase } from './supabaseConfig';  // Add this line
 
-export default function DrawingScreen() {
+export default function DrawingScreen({ navigation }) {
   const [paths, setPaths] = useState([]);
   const [currentPath, setCurrentPath] = useState(null);
   const [currentColor, setCurrentColor] = useState('#000000');
@@ -72,6 +74,75 @@ export default function DrawingScreen() {
     setPaths([]);
     setCurrentPath(null);
   };
+  const saveDrawing = async () => {
+  if (paths.length === 0) {
+    Alert.alert('Error', 'Please draw something first!');
+    return;
+  }
+
+  try {
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      Alert.alert('Error', 'Please log in');
+      return;
+    }
+
+    // Capture the canvas as an image
+    const uri = await canvasRef.current.capture();
+    
+    // Convert to blob for upload
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    
+    // Create unique filename
+    const fileName = `${user.id}/${Date.now()}.png`;
+    
+    // Upload to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('drawings')
+      .upload(fileName, blob, {
+        contentType: 'image/png',
+      });
+
+    if (uploadError) {
+      console.error('Upload error:', uploadError);
+      Alert.alert('Error', 'Failed to upload drawing');
+      return;
+    }
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('drawings')
+      .getPublicUrl(fileName);
+
+    // Save metadata to database
+    const { error: dbError } = await supabase
+      .from('user_drawings')
+      .insert([
+        {
+          user_id: user.id,
+          image_url: publicUrl,
+        }
+      ]);
+
+      if (dbError) {
+        console.error('Database error:', dbError);
+        Alert.alert('Error', 'Failed to save drawing');
+        return;
+      }
+
+      Alert.alert('Success', 'Drawing saved to library!');
+      
+      // Clear the canvas after saving
+      clearCanvas();
+      
+    } catch (error) {
+      console.error('Save error:', error);
+      Alert.alert('Error', 'Failed to save drawing');
+    }
+  };
 
   const toggleEraser = () => {
     setIsEraser(!isEraser);
@@ -104,37 +175,39 @@ export default function DrawingScreen() {
         )}
       </View>
       {/* Drawing Canvas */}
-      <View style={styles.canvasContainer} {...panResponder.panHandlers}>
-        <Svg height="100%" width="100%">
-          {/* Tan background */}
-          <Rect width="100%" height="100%" fill="#D2B48C" />
-          
-          {/* Draw all completed paths */}
-          {paths.map((p, index) => (
-            <Path
-              key={`path-${index}`}
-              d={p.pathData}
-              stroke={p.color}
-              strokeWidth={p.strokeWidth}
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ))}
-          
-          {/* Current path being drawn */}
-          {currentPath && (
-            <Path
-              d={currentPath.pathData}
-              stroke={currentPath.color}
-              strokeWidth={currentPath.strokeWidth}
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-        </Svg>
-      </View>
+      <ViewShot ref={canvasRef} options={{ format: 'png', quality: 0.9 }}>
+        <View style={styles.canvasContainer} {...panResponder.panHandlers}>
+          <Svg height="100%" width="100%">
+            {/* Tan background */}
+            <Rect width="100%" height="100%" fill="#D2B48C" />
+            
+            {/* Draw all completed paths */}
+            {paths.map((p, index) => (
+              <Path
+                key={`path-${index}`}
+                d={p.pathData}
+                stroke={p.color}
+                strokeWidth={p.strokeWidth}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+            
+            {/* Current path being drawn */}
+            {currentPath && (
+              <Path
+                d={currentPath.pathData}
+                stroke={currentPath.color}
+                strokeWidth={currentPath.strokeWidth}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+          </Svg>
+        </View>
+      </ViewShot>
 
       {/* Tool Selection (Pen or Eraser) */}
       <View style={styles.toolContainer}>
@@ -196,7 +269,7 @@ export default function DrawingScreen() {
           <Text style={styles.buttonText}>Clear</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.completeButton}>
+        <TouchableOpacity style={styles.completeButton} onPress={saveDrawing}>
           <Text style={styles.buttonText}>Complete</Text>
         </TouchableOpacity>
       </View>
