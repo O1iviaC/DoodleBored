@@ -175,7 +175,7 @@ export default function DrawingScreen({ navigation }) {
         )}
       </View>
       {/* Drawing Canvas */}
-      <ViewShot ref={canvasRef} options={{ format: 'png', quality: 0.9 }}>
+      <ViewShot ref={canvasRef} options={{ format: 'png', quality: 0.9 }} style={styles.canvasWrapper}>
         <View style={styles.canvasContainer} {...panResponder.panHandlers}>
           <Svg height="100%" width="100%">
             {/* Tan background */}
@@ -326,10 +326,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     paddingTop: 50,
   },
+  canvasWrapper: {
+    flex: 1,
+    margin: 10,
+  },
   canvasContainer: {
     flex: 1,
     backgroundColor: '#D2B48C',
-    margin: 10,
     borderRadius: 10,
     overflow: 'hidden',
   },
