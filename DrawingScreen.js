@@ -33,7 +33,33 @@ export default function DrawingScreen({ navigation }) {
   currentColorRef.current = currentColor;
   currentSizeRef.current = currentSize;
   isEraserRef.current = isEraser;
-
+const testUpload = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    console.log('User ID:', user.id);
+    
+    // Create a simple text blob to test upload
+    const testBlob = new Blob(['Hello World'], { type: 'text/plain' });
+    const fileName = `${user.id}/test-${Date.now()}.txt`;
+    
+    console.log('Uploading to:', fileName);
+    
+    const { data, error } = await supabase.storage
+      .from('drawings')
+      .upload(fileName, testBlob);
+    
+    console.log('Upload response:', { data, error });
+    
+    if (error) {
+      Alert.alert('Upload Failed', error.message);
+    } else {
+      Alert.alert('Success!', 'Test upload worked!');
+    }
+  } catch (err) {
+    console.error('Test error:', err);
+    Alert.alert('Error', err.message);
+  }
+};
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -160,19 +186,29 @@ export default function DrawingScreen({ navigation }) {
         </TouchableOpacity>
         
         {menuOpen && (
-          <View style={styles.dropdown}>
-            <TouchableOpacity 
-              style={styles.dropdownItem}
-              onPress={() => {
-                setMenuOpen(false);
-                navigation.navigate('Library');
-              }}
-            >
-              <Text style={styles.dropdownText}>Library</Text>
-            </TouchableOpacity>
-            {/* Add more menu items here later */}
-          </View>
-        )}
+  <View style={styles.dropdown}>
+    <TouchableOpacity 
+      style={styles.dropdownItem}
+      onPress={() => {
+        setMenuOpen(false);
+        navigation.navigate('Library');
+      }}
+    >
+      <Text style={styles.dropdownText}>📚 Library</Text>
+    </TouchableOpacity>
+    
+    {/* Test Upload Button */}
+    <TouchableOpacity 
+      style={styles.dropdownItem}
+      onPress={() => {
+        setMenuOpen(false);
+        testUpload();
+      }}
+    >
+      <Text style={styles.dropdownText}>🧪 Test Upload</Text>
+    </TouchableOpacity>
+  </View>
+)}
       </View>
       {/* Drawing Canvas */}
       <ViewShot ref={canvasRef} options={{ format: 'png', quality: 0.9 }} style={styles.canvasWrapper}>
