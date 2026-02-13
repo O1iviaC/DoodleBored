@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, PanResponder, Alert } from 'react-native';
-import Svg, { Path, Rect } from 'react-native-svg';
+import { View, StyleSheet, TouchableOpacity, Text, PanResponder, Alert, Image } from 'react-native';
+import Svg, { Path, Rect, Line, Circle as SvgCircle } from 'react-native-svg';
 import ViewShot from 'react-native-view-shot';
-import { supabase } from './supabaseConfig';  // Add this line
+import { supabase } from './supabaseConfig';
+import Slider from '@react-native-community/slider';
 
 export default function DrawingScreen({ navigation }) {
   const [paths, setPaths] = useState([]);
@@ -13,65 +14,36 @@ export default function DrawingScreen({ navigation }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const canvasRef = useRef(null);
 
-  // Available colors
+  // Available colors matching Figma
   const colors = [
-    { name: 'black', value: '#000000' },
-    { name: 'white', value: '#FFFFFF' },
-    { name: 'red', value: '#FF0000' },
-    { name: 'orange', value: '#FFA500' },
-    { name: 'blue', value: '#0000FF' },
+    '#EA7171', // red
+    '#EABC71', // orange
+    '#EAEA71', // yellow
+    '#8BEA71', // green
+    '#71A7EA', // blue
+    '#A171EA', // purple
+    '#000000', // black
+    '#9A7731', // brown
   ];
 
-  const sizes = [2, 5, 12];
-
-  // Use refs to store the latest values
   const currentColorRef = useRef(currentColor);
   const currentSizeRef = useRef(currentSize);
   const isEraserRef = useRef(isEraser);
   
-  // Update refs whenever state changes
   currentColorRef.current = currentColor;
   currentSizeRef.current = currentSize;
   isEraserRef.current = isEraser;
-const testUpload = async () => {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    console.log('User ID:', user.id);
-    
-    // Create a simple text blob to test upload
-    const testBlob = new Blob(['Hello World'], { type: 'text/plain' });
-    const fileName = `${user.id}/test-${Date.now()}.txt`;
-    
-    console.log('Uploading to:', fileName);
-    
-    const { data, error } = await supabase.storage
-      .from('drawings')
-      .upload(fileName, testBlob);
-    
-    console.log('Upload response:', { data, error });
-    
-    if (error) {
-      Alert.alert('Upload Failed', error.message);
-    } else {
-      Alert.alert('Success!', 'Test upload worked!');
-    }
-  } catch (err) {
-    console.error('Test error:', err);
-    Alert.alert('Error', err.message);
-  }
-};
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (e) => {
         const { locationX, locationY } = e.nativeEvent;
-        // Start a new path with current settings from refs
-        // If eraser, use tan color (#D2B48C) to "erase"
         setCurrentPath({
           pathData: `M${locationX},${locationY}`,
-          color: isEraserRef.current ? '#D2B48C' : currentColorRef.current,
-          strokeWidth: isEraserRef.current ? 10 : currentSizeRef.current, // Eraser is bigger
+          color: isEraserRef.current ? '#FDFBF7' : currentColorRef.current,
+          strokeWidth: isEraserRef.current ? 20 : currentSizeRef.current,
         });
       },
       onPanResponderMove: (e) => {
@@ -87,7 +59,6 @@ const testUpload = async () => {
       onPanResponderRelease: () => {
         setCurrentPath((prev) => {
           if (prev && prev.pathData) {
-            // Save the completed path
             setPaths((prevPaths) => [...prevPaths, prev]);
           }
           return null;
@@ -100,58 +71,56 @@ const testUpload = async () => {
     setPaths([]);
     setCurrentPath(null);
   };
+
+  const undoLastStroke = () => {
+    if (paths.length > 0) {
+      setPaths(paths.slice(0, -1));
+    }
+  };
+
   const saveDrawing = async () => {
-  if (paths.length === 0) {
-    Alert.alert('Error', 'Please draw something first!');
-    return;
-  }
-
-  try {
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      Alert.alert('Error', 'Please log in');
+    if (paths.length === 0) {
+      Alert.alert('Error', 'Please draw something first!');
       return;
     }
 
-    // Capture the canvas as an image
-    const uri = await canvasRef.current.capture();
-    
-    // Convert to blob for upload
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    
-    // Create unique filename
-    const fileName = `${user.id}/${Date.now()}.png`;
-    
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('drawings')
-      .upload(fileName, blob, {
-        contentType: 'image/png',
-      });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        Alert.alert('Error', 'Please log in');
+        return;
+      }
 
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      Alert.alert('Error', 'Failed to upload drawing');
-      return;
-    }
+      const uri = await canvasRef.current.capture();
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const fileName = `${user.id}/${Date.now()}.png`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('drawings')
+        .upload(fileName, blob, {
+          contentType: 'image/png',
+        });
 
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('drawings')
-      .getPublicUrl(fileName);
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        Alert.alert('Error', 'Failed to upload drawing');
+        return;
+      }
 
-    // Save metadata to database
-    const { error: dbError } = await supabase
-      .from('user_drawings')
-      .insert([
-        {
-          user_id: user.id,
-          image_url: publicUrl,
-        }
-      ]);
+      const { data: { publicUrl } } = supabase.storage
+        .from('drawings')
+        .getPublicUrl(fileName);
+
+      const { error: dbError } = await supabase
+        .from('user_drawings')
+        .insert([
+          {
+            user_id: user.id,
+            image_url: publicUrl,
+          }
+        ]);
 
       if (dbError) {
         console.error('Database error:', dbError);
@@ -160,8 +129,6 @@ const testUpload = async () => {
       }
 
       Alert.alert('Success', 'Drawing saved to library!');
-      
-      // Clear the canvas after saving
       clearCanvas();
       
     } catch (error) {
@@ -170,54 +137,43 @@ const testUpload = async () => {
     }
   };
 
-  const toggleEraser = () => {
-    setIsEraser(!isEraser);
-  };
-
   return (
     <View style={styles.container}>
+      {/* Top Border */}
+      <View style={styles.topBorder} />
+
       {/* Menu Button */}
       <View style={styles.menuContainer}>
         <TouchableOpacity 
           style={styles.menuButton}
           onPress={() => setMenuOpen(!menuOpen)}
         >
-          <Text style={styles.menuIcon}>☰</Text>
+          <View style={styles.menuLine} />
+          <View style={styles.menuLine} />
+          <View style={styles.menuLine} />
         </TouchableOpacity>
         
         {menuOpen && (
-  <View style={styles.dropdown}>
-    <TouchableOpacity 
-      style={styles.dropdownItem}
-      onPress={() => {
-        setMenuOpen(false);
-        navigation.navigate('Library');
-      }}
-    >
-      <Text style={styles.dropdownText}>📚 Library</Text>
-    </TouchableOpacity>
-    
-    {/* Test Upload Button */}
-    <TouchableOpacity 
-      style={styles.dropdownItem}
-      onPress={() => {
-        setMenuOpen(false);
-        testUpload();
-      }}
-    >
-      <Text style={styles.dropdownText}>🧪 Test Upload</Text>
-    </TouchableOpacity>
-  </View>
-)}
+          <View style={styles.dropdown}>
+            <TouchableOpacity 
+              style={styles.dropdownItem}
+              onPress={() => {
+                setMenuOpen(false);
+                navigation.navigate('Library');
+              }}
+            >
+              <Text style={styles.dropdownText}>Library</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
+
       {/* Drawing Canvas */}
       <ViewShot ref={canvasRef} options={{ format: 'png', quality: 0.9 }} style={styles.canvasWrapper}>
         <View style={styles.canvasContainer} {...panResponder.panHandlers}>
           <Svg height="100%" width="100%">
-            {/* Tan background */}
-            <Rect width="100%" height="100%" fill="#D2B48C" />
+            <Rect width="100%" height="100%" fill="#FDFBF7" />
             
-            {/* Draw all completed paths */}
             {paths.map((p, index) => (
               <Path
                 key={`path-${index}`}
@@ -230,7 +186,6 @@ const testUpload = async () => {
               />
             ))}
             
-            {/* Current path being drawn */}
             {currentPath && (
               <Path
                 d={currentPath.pathData}
@@ -245,217 +200,290 @@ const testUpload = async () => {
         </View>
       </ViewShot>
 
-      {/* Tool Selection (Pen or Eraser) */}
-      <View style={styles.toolContainer}>
-        <TouchableOpacity 
-          style={[styles.toolButton, !isEraser && styles.selectedTool]}
-          onPress={() => setIsEraser(false)}
-        >
-          <Text style={styles.toolText}>✏️ Pen</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.toolButton, isEraser && styles.selectedTool]}
-          onPress={toggleEraser}
-        >
-          <Text style={styles.toolText}>🧹 Eraser</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Bottom Controls Section */}
+      <View style={styles.controlsSection}>
+        {/* Draw/Erase Toggle */}
+        <View style={styles.toolToggleRow}>
+          <TouchableOpacity 
+            style={[styles.toolToggleButton, !isEraser && styles.toolToggleActive]}
+            onPress={() => setIsEraser(false)}
+          >
+            <Text style={styles.toolToggleText}>draw ✏️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.toolToggleButton, isEraser && styles.toolToggleActive]}
+            onPress={() => setIsEraser(true)}
+          >
+            <Text style={styles.toolToggleText}>erase 🧹</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Color Picker - only show when not in eraser mode */}
-      {!isEraser && (
-        <View style={styles.colorContainer}>
-          <Text style={styles.label}>Color:</Text>
-          {colors.map((color) => (
-            <TouchableOpacity
-              key={color.value}
-              style={[
-                styles.colorButton,
-                { backgroundColor: color.value },
-                currentColor === color.value && styles.selectedButton,
-                color.value === '#FFFFFF' && styles.whiteBorder,
-              ]}
-              onPress={() => setCurrentColor(color.value)}
+        {/* Size Slider */}
+        <View style={styles.sliderContainer}>
+          <Svg height="80" width="100%" viewBox="0 0 400 80">
+            <Line
+              x1="20"
+              y1="40"
+              x2="380"
+              y2="40"
+              stroke="#706A61"
+              strokeWidth="4"
             />
-          ))}
+            <SvgCircle
+              cx={20 + ((currentSize - 1) / 19) * 360}
+              cy="40"
+              r="20"
+              fill="#FDFBF7"
+              stroke="#706A61"
+              strokeWidth="4"
+            />
+          </Svg>
+          <Slider
+            style={styles.slider}
+            minimumValue={1}
+            maximumValue={20}
+            value={currentSize}
+            onValueChange={setCurrentSize}
+            minimumTrackTintColor="transparent"
+            maximumTrackTintColor="transparent"
+            thumbTintColor="transparent"
+          />
         </View>
-      )}
 
-      {/* Size Picker - only show when not in eraser mode */}
-      {!isEraser && (
-        <View style={styles.sizeContainer}>
-          <Text style={styles.label}>Size:</Text>
-          {sizes.map((size) => (
-            <TouchableOpacity
-              key={size}
-              style={[
-                styles.sizeButton,
-                currentSize === size && styles.selectedButton,
-              ]}
-              onPress={() => setCurrentSize(size)}
-            >
-              <Text>{size === 2 ? 'S' : size === 5 ? 'M' : 'L'}</Text>
-            </TouchableOpacity>
-          ))}
+        {/* Color Palette */}
+        <View style={styles.colorPalette}>
+          <View style={styles.colorRow}>
+            {colors.slice(0, 4).map((color) => (
+              <TouchableOpacity
+                key={color}
+                style={[
+                  styles.colorCircle,
+                  { backgroundColor: color },
+                  currentColor === color && styles.selectedColor,
+                ]}
+                onPress={() => setCurrentColor(color)}
+              />
+            ))}
+          </View>
+          <View style={styles.colorRow}>
+            {colors.slice(4, 8).map((color) => (
+              <TouchableOpacity
+                key={color}
+                style={[
+                  styles.colorCircle,
+                  { backgroundColor: color },
+                  currentColor === color && styles.selectedColor,
+                ]}
+                onPress={() => setCurrentColor(color)}
+              />
+            ))}
+          </View>
         </View>
-      )}
 
-      {/* Controls */}
-      <View style={styles.controls}>
-        <TouchableOpacity style={styles.clearButton} onPress={clearCanvas}>
-          <Text style={styles.buttonText}>Clear</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.completeButton} onPress={saveDrawing}>
-          <Text style={styles.buttonText}>Complete</Text>
-        </TouchableOpacity>
+        {/* Action Buttons */}
+        <View style={styles.actionButtonsRow}>
+          <TouchableOpacity style={styles.saveButton} onPress={saveDrawing}>
+            <Text style={styles.buttonTextWhite}>save</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.undoButton} onPress={undoLastStroke}>
+            <Text style={styles.buttonTextWhite}>undo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.clearButton} onPress={clearCanvas}>
+            <Text style={styles.buttonTextBlack}>clear</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Bottom Border */}
+      <View style={styles.bottomBorder} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FDFBF7',
+  },
+  topBorder: {
+    height: 40,
+    backgroundColor: '#ABA59C',
+  },
   menuContainer: {
     position: 'absolute',
     top: 50,
-    left: 10,
+    left: 20,
     zIndex: 1000,
   },
   menuButton: {
-    width: 50,
-    height: 50,
-    backgroundColor: '#fff',
-    borderRadius: 25,
+    width: 60,
+    height: 60,
+    backgroundColor: '#E6DFD3',
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
+    padding: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
     shadowRadius: 4,
+    elevation: 5,
   },
-  menuIcon: {
-    fontSize: 24,
-    color: '#333',
+  menuLine: {
+    width: '100%',
+    height: 3,
+    backgroundColor: '#706A61',
+    marginVertical: 3,
+    borderRadius: 2,
   },
   dropdown: {
     marginTop: 10,
     backgroundColor: '#fff',
     borderRadius: 8,
     padding: 5,
-    elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+    elevation: 5,
     minWidth: 150,
   },
   dropdownItem: {
     padding: 15,
-    borderRadius: 5,
   },
   dropdownText: {
     fontSize: 16,
     color: '#333',
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#f0f0f0',
-    paddingTop: 50,
-  },
   canvasWrapper: {
     flex: 1,
-    margin: 10,
+    marginHorizontal: 10,
+    marginTop: 10,
   },
   canvasContainer: {
     flex: 1,
-    backgroundColor: '#D2B48C',
-    borderRadius: 10,
-    overflow: 'hidden',
+    backgroundColor: '#FDFBF7',
   },
-  toolContainer: {
+  controlsSection: {
+    backgroundColor: '#E6DFD3',
+    paddingVertical: 20,
+    paddingHorizontal: 15,
+  },
+  toolToggleRow: {
     flexDirection: 'row',
-    padding: 10,
-    backgroundColor: '#fff',
-    justifyContent: 'space-around',
-  },
-  toolButton: {
-    padding: 10,
-    borderRadius: 5,
-    backgroundColor: '#e0e0e0',
-    flex: 1,
-    marginHorizontal: 5,
-    alignItems: 'center',
-  },
-  selectedTool: {
-    backgroundColor: '#4CAF50',
-  },
-  toolText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  colorContainer: {
-    flexDirection: 'row',
-    padding: 10,
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  label: {
-    marginRight: 10,
-    fontWeight: 'bold',
-  },
-  colorButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginHorizontal: 5,
-  },
-  whiteBorder: {
-    borderWidth: 2,
-    borderColor: '#ccc',
-  },
-  selectedButton: {
-    borderWidth: 3,
-    borderColor: '#4CAF50',
-  },
-  sizeContainer: {
-    flexDirection: 'row',
-    padding: 10,
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  sizeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 5,
-    marginHorizontal: 5,
-    backgroundColor: '#e0e0e0',
     justifyContent: 'center',
+    gap: 40,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  toolToggleButton: {
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 70,
+    backgroundColor: '#fff',
+    minWidth: 140,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  toolToggleActive: {
+    backgroundColor: '#D4CFC3',
+  },
+  toolToggleText: {
+    fontSize: 20,
+    color: '#333',
+  },
+  sliderContainer: {
+    height: 80,
+    marginBottom: 20,
+    position: 'relative',
+  },
+  slider: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+  },
+  colorPalette: {
+    marginBottom: 20,
+  },
+  colorRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  colorCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  selectedColor: {
+    borderWidth: 4,
+    borderColor: '#333',
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    gap: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  saveButton: {
+    backgroundColor: '#706A61',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 72,
+    flex: 1,
     alignItems: 'center',
   },
-  controls: {
-    flexDirection: 'row',
-    padding: 10,
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
+  undoButton: {
+    backgroundColor: '#706A61',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 72,
+    flex: 1,
+    alignItems: 'center',
   },
   clearButton: {
-    backgroundColor: '#f44336',
-    padding: 15,
-    borderRadius: 5,
+    backgroundColor: '#FDFBF7',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 72,
     flex: 1,
-    marginRight: 5,
     alignItems: 'center',
   },
-  completeButton: {
-    backgroundColor: '#4CAF50',
-    padding: 15,
-    borderRadius: 5,
-    flex: 1,
-    marginLeft: 5,
-    alignItems: 'center',
+  buttonTextWhite: {
+    color: '#FFF',
+    fontSize: 24,
+    fontWeight: '400',
+    letterSpacing: -0.5,
   },
-  buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+  buttonTextBlack: {
+    color: '#000',
+    fontSize: 24,
+    fontWeight: '400',
+    letterSpacing: -0.5,
+  },
+  bottomBorder: {
+    height: 40,
+    backgroundColor: '#ABA59C',
   },
 });
